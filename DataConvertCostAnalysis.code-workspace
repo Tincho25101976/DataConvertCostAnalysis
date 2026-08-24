@@ -1,0 +1,29 @@
+{
+  "folders": [
+    {
+      "name": "Cost analysis process",
+      "path": "."
+    }
+  ],
+  "settings": {
+    // 1. Especificar el intérprete/entorno virtual de Python
+    //"python.defaultInterpreterPath": "${workspaceFolder}/venv/Scripts/python.exe",
+
+    // 2. Definir las rutas de búsqueda para la solución (PYTHONPATH)
+    // Esto permite que VS Code reconozca tus paquetes locales (ej. helper, model)
+    "python.analysis.extraPaths": [
+      "${workspaceFolder}"
+    ],
+
+    // 3. Configurar el linter y analizador estático (Pylance)
+    "python.analysis.typeCheckingMode": "basic",
+    "python.analysis.autoImportCompletions": true
+  },
+  "extensions": {
+    // Recomendar extensiones para cualquier desarrollador que abra esta solución
+    "recommendations": [
+      "ms-python.python",
+      "ms-python.vscode-pylance"
+    ]
+  }
+}

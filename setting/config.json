@@ -1,0 +1,28 @@
+{
+    "fontName": "Segoe UI",
+    "fontSize": 8,
+    "tableName": [
+        {
+            "name": "mGetMaterialsComplete",
+            "columns": [
+                "Plant",
+                "Material",
+                "MRPController",
+                "ValuationClass",
+                "Unit",
+                "MaterialName"
+            ],
+            "isProcess": false
+        },
+        {
+            "name": "tSourcePlant",
+            "columns": [
+                "ID",
+                "Description",
+                "Value",
+                "Priority"
+            ],
+            "isProcess": true
+        }
+    ]
+}

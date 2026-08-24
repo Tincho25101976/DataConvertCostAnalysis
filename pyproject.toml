@@ -1,0 +1,36 @@
+[tool.mypy]
+# Habilita el plugin oficial de SQLAlchemy 2.0 integrado en Mypy
+#plugins = ["sqlalchemy.ext.mypy.plugin"]
+
+# Versión de Python de tu proyecto
+python_version = "3.10"
+
+# Opciones de estrictez para detección de errores
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+# Permite que las anotaciones de 'from __future__ import annotations' funcionen bien
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+# Si tienes carpetas de migraciones u otros archivos que no quieras auditar
+module = "migrations.*"
+ignore_errors = true
+
+[tool.pylint.format]
+max-line-length = 120
+
+[tool.pylint.messages_control]
+disable = [
+    "missing-function-docstring",
+    "missing-module-docstring",
+    "missing-class-docstring",
+    "trailing-whitespace",
+    "invalid-name",
+    "multiple-statements",
+    "no-member",
+    "unused-argument",
+    "bare-except",
+    "broad-exception-caught"
+]
