@@ -1,5 +1,7 @@
 from typing import Any
 
+from xlwings import sheets
+
 from setting.SettingSupport import SettingSupport
 
 class Setting(SettingSupport):
@@ -75,6 +77,12 @@ class Setting(SettingSupport):
 
     def GetTables(self)->list[str]:
         return list(set([name for name, config in self.tablesConfig.items()]))
+
+    def GetTablesWithSheet(self)->list[tuple[str, str]]:
+        return list(set(
+            (name, str(config.get(self.__keySheet, ''))) 
+                for name, config in self.tablesConfig.items()
+            ))
 
     def SaveOrUpdateTableConfig(self, tableName:str, columns:list[str], isProcess:bool, sheetName:str, tableAlias:str, autoSave:bool=True)->None:
         if not tableName: return

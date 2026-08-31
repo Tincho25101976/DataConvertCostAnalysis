@@ -15,6 +15,7 @@ import ttkbootstrap as tb
 
 from setting.Setting import Setting
 from helper.HelperToolTip import ToolTip
+from support.types.SupportEnumWithLabel import HelperSupportEnum
 
 TFrame = TypeVar('TFrame', bound=tk.Frame | tk.Misc)
 AnchorType = Literal["nw", "n", "ne", "w", "center", "e", "sw", "s", "se"]
@@ -181,8 +182,8 @@ TBScrollableControl = Union[
 #endregion
 
 #region HelperCustomStyle
-class HelperCustomStyleName(Enum):
-    _label:str
+class HelperCustomStyleName(HelperSupportEnum):
+    #_label:str
     LABEL_NORMAL_STYLE_NAME = (0, "CustomLabelNormal.primary.TLabel")
     LABEL_INFORMATION_STYLE_NAME = (1, "CustomLabelInformation.primary.TLabel")
     LABEL_COUNT_STYLE_NAME = (2, "CustomLabelCount.primary.TLabel")
@@ -209,9 +210,10 @@ class HelperCustomStyleName(Enum):
     PRIMARY_ROUNDTOGGLE_STYLE_NAME = (500, 'primary.Roundtoggle.Toolbutton')
 
     HELPER_STYLE_NAME = (999, 'CustomStyleHelper')
-
+    
     UNDEFINED = (-1, '')
 
+    '''
     def __new__(cls, value:int, label:str):
         obj = object.__new__(cls)
         obj._value_ = value
@@ -222,6 +224,7 @@ class HelperCustomStyleName(Enum):
     def label(self) -> str:
         return self._label
 
+    
     @classmethod
     def FindByLabel(cls, label: str, _allowRaise:bool=True) -> 'HelperCustomStyleName':
         for member in cls:
@@ -230,29 +233,10 @@ class HelperCustomStyleName(Enum):
         if _allowRaise: 
             raise ValueError(f"No {cls.__name__} member found with label: '{label}'")
         return HelperCustomStyleName.UNDEFINED
+    '''
 
 class HelperCustomStyle:
     #region Constants
-    #TREEVIEW_STYLE_NAME:Final[str] = "CustomTreeview.primary.Treeview"
-    #CHECKBOX_STYLE_NAME:Final[str] = "Custom.primary.TCheckbutton"
-    #NOTEBOOK_STYLE_NAME:Final[str] = "Custom.TNotebook"
-
-    #LABEL_NORMAL_STYLE_NAME:Final[str] = "CustomLabelNormal.primary.TLabel"
-    #LABEL_INFORMATION_STYLE_NAME:Final[str] = "CustomLabelInformation.primary.TLabel"
-    #LABEL_COUNT_STYLE_NAME:Final[str] = "CustomLabelCount.primary.TLabel"
-    #LABEL_SUMMARY_STYLE_NAME:Final[str] = "CustomLabelSummary.primary.TLabel"
-    #LABEL_LINK_STYLE_NAME:Final[str] = "CustomLabelLink.primary.TLabel"
-    #ENTRY_STYLE_NAME:Final[str] = "CustomEntry.primary.TEntry"
-    #COMBOBOX_STYLE_NAME:Final[str] = "CustomComboBox.primary.TCombobox"
-    #SCALE_STYLE_NAME:Final[str] = "Horizontal.TScale"
-    #SCALE_LABEL_STYLE_NAME:Final[str] = "CustomScale.primary.TLabel"
-    #RADIOBUTTON_STYLE_NAME:Final[str] = "CustomRadiobutton.primary.TRadiobutton"
-    #FRAME_LABEL_STYLE_NAME:Final[str] = "CustomLabelFrame.primary.TLabelframe"
-    #TEXT_STYLE_NAME:Final[str] = "CustomTextBox.primary.TText"
-    #BUTTON_STYLE_NAME:Final[str] = "CustomButtom.primary.TButton"
-    #SEPARATOR_STYLE_NAME:Final[str] = "CustomSeparator.primary.TSeparator"
-    #PROGRESS_BAR_STYLE_NAME:Final[str] = 'CustomProgressbar.primary.Horizontal.TProgressbar'
-
     COMBOBOX_WIDTH_DEFAULT:Final[int]=8
     SPINBOX_WIDTH_DEFAULT:Final[int]=5
     ENTRY_WIDTH_DEFAULT:Final[int]=40
@@ -2002,7 +1986,5 @@ class HelperStyle():
         if isinstance(root_window, tb.Window):
             return root_window.style
         return tb.Style(_parent)
-
-    
-        
+       
 #endregion

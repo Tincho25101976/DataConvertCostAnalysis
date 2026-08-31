@@ -344,6 +344,7 @@ class ImportProcess(tb.Window):
             if self.sourceWorkbookMeta is None: return
             if self.settingApp is None: return
 
+            '''
             _tablesInSetting: list[str] = self.settingApp.GetTables()
             if not _tablesInSetting: return
 
@@ -357,6 +358,23 @@ class ImportProcess(tb.Window):
                         if tableName in _setTablesInSetting:
                             _targetTables[str(tableName)] = {
                                 'sheet': sheetName,
+                                'ref': str(tableObj)
+                            }
+            '''
+
+            _tablesInSetting: list[tuple[str, str]] = self.settingApp.GetTablesWithSheet()
+            if not _tablesInSetting: return
+
+            _targetTables: dict[str, dict] = {}
+            #_setTablesInSetting = _tablesInSetting
+
+            for table, sheet in _tablesInSetting:
+                ws = self.sourceWorkbookMeta[sheet]
+                if ws.tables and ws.sheet_state == 'visible':
+                    for tableName, tableObj in ws.tables.items():
+                        if tableName == table:
+                            _targetTables[str(tableName)] = {
+                                'sheet': sheet,
                                 'ref': str(tableObj)
                             }
 
