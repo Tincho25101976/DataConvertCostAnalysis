@@ -1,17 +1,20 @@
 from enum import Enum
 from dataclasses import dataclass
+import math
+import copy
+import re
 from typing import Any, Callable, Final, Literal, Optional, Protocol, Union, TypeVar, get_args, runtime_checkable
 
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, font as tkFont
+from unittest import result
+from colorama import Style
 import pandas as pd
-from numpy import maximum
 from sympy import true
 import ttkbootstrap as tb
 
 from setting.Setting import Setting
 from helper.HelperToolTip import ToolTip
-#from helper.HelperControlCustom import ScrolledCheckboxList
 
 TFrame = TypeVar('TFrame', bound=tk.Frame | tk.Misc)
 AnchorType = Literal["nw", "n", "ne", "w", "center", "e", "sw", "s", "se"]
@@ -129,6 +132,11 @@ class HelperItemLayout:
         if isinstance(self.anchor, str) and self.anchor in get_args(AnchorType):
             return self.anchor  # type: ignore[return-value]
         return 'nw'
+    @property
+    def widthValue(self)->int: return self.width if self.width else 0
+    @widthValue.setter
+    def widthValue(self, value:int | None): 
+        object.__setattr__(self, "width", value)
 
     def __isCheck(self, data:str | None)->bool:
         return not data is None and len(data) > 0 and not data == tk.NONE
@@ -137,6 +145,13 @@ class HelperItemLayout:
             if hasattr(self, _key):
                 object.__setattr__(self, _key, _value)
         return self
+
+    def clone(self, **kwargs)->'HelperItemLayout':
+        data:HelperItemLayout = copy.deepcopy(self)
+        for _key, _value in kwargs.items():
+            if hasattr(data, _key):
+                object.__setattr__(data, _key, _value)
+        return data
 #endregion
 
 #-------------------------------------------------------------------------------
@@ -166,43 +181,96 @@ TBScrollableControl = Union[
 #endregion
 
 #region HelperCustomStyle
+class HelperCustomStyleName(Enum):
+    _label:str
+    LABEL_NORMAL_STYLE_NAME = (0, "CustomLabelNormal.primary.TLabel")
+    LABEL_INFORMATION_STYLE_NAME = (1, "CustomLabelInformation.primary.TLabel")
+    LABEL_COUNT_STYLE_NAME = (2, "CustomLabelCount.primary.TLabel")
+    LABEL_SUMMARY_STYLE_NAME = (3, "CustomLabelSummary.primary.TLabel")
+    LABEL_LINK_STYLE_NAME = (4, "CustomLabelLink.primary.TLabel")
+    ENTRY_STYLE_NAME = (5, "CustomEntry.primary.TEntry")
+    COMBOBOX_STYLE_NAME = (6, "CustomComboBox.primary.TCombobox")
+    SCALE_STYLE_NAME = (7, "Horizontal.TScale")
+    SCALE_LABEL_STYLE_NAME = (8, "CustomScale.primary.TLabel")
+    RADIOBUTTON_STYLE_NAME = (9, "CustomRadiobutton.primary.TRadiobutton")
+    FRAME_LABEL_STYLE_NAME = (10, "CustomLabelFrame.primary.TLabelframe")
+    TEXT_STYLE_NAME = (11, "CustomTextBox.primary.TText")
+    BUTTON_STYLE_NAME = (12, "CustomButtom.primary.TButton")
+    SEPARATOR_STYLE_NAME = (13, "CustomSeparator.primary.TSeparator")
+    PROGRESS_BAR_STYLE_NAME = (14, 'CustomProgressbar.primary.Horizontal.TProgressbar')
+    TREEVIEW_STYLE_NAME  = (15, "CustomTreeview.primary.Treeview")
+    CHECKBOX_STYLE_NAME = (16, "Custom.primary.TCheckbutton")
+    NOTEBOOK_STYLE_NAME = (17, "Custom.TNotebook")
+
+    TREEVIEW_STYLE_HEADING_NAME  = (100, "CustomTreeview.primary.Treeview.Heading")
+    FRAME_LABEL_STYLE_LABEL_NAME = (101, "CustomLabelFrame.primary.TLabelframe.Label")
+    NOTEBOOK_STYLE_TAB_NAME = (102, "Custom.TNotebook.Tab")
+
+    PRIMARY_ROUNDTOGGLE_STYLE_NAME = (500, 'primary.Roundtoggle.Toolbutton')
+
+    HELPER_STYLE_NAME = (999, 'CustomStyleHelper')
+
+    UNDEFINED = (-1, '')
+
+    def __new__(cls, value:int, label:str):
+        obj = object.__new__(cls)
+        obj._value_ = value
+        obj._label = label
+        return obj
+
+    @property
+    def label(self) -> str:
+        return self._label
+
+    @classmethod
+    def FindByLabel(cls, label: str, _allowRaise:bool=True) -> 'HelperCustomStyleName':
+        for member in cls:
+            if member.label.lower() == label.lower():
+                return member
+        if _allowRaise: 
+            raise ValueError(f"No {cls.__name__} member found with label: '{label}'")
+        return HelperCustomStyleName.UNDEFINED
+
 class HelperCustomStyle:
     #region Constants
-    TREEVIEW_STYLE_NAME:Final[str] = "CustomTreeview.primary.Treeview"
-    CHECKBOX_STYLE_NAME:Final[str] = "Custom.primary.TCheckbutton"
-    NOTEBOOK_STYLE_NAME:Final[str] = "Custom.TNotebook"
+    #TREEVIEW_STYLE_NAME:Final[str] = "CustomTreeview.primary.Treeview"
+    #CHECKBOX_STYLE_NAME:Final[str] = "Custom.primary.TCheckbutton"
+    #NOTEBOOK_STYLE_NAME:Final[str] = "Custom.TNotebook"
 
-    LABEL_NORMAL_STYLE_NAME:Final[str] = "CustomLabelNormal.primary.TLabel"
-    LABEL_INFORMATION_STYLE_NAME:Final[str] = "CustomLabelInformation.primary.TLabel"
-    LABEL_COUNT_STYLE_NAME:Final[str] = "CustomLabelCount.primary.TLabel"
-    LABEL_SUMMARY_STYLE_NAME:Final[str] = "CustomLabelSummary.primary.TLabel"
-    LABEL_LINK_STYLE_NAME:Final[str] = "CustomLabelLink.primary.TLabel"
-    ENTRY_STYLE_NAME:Final[str] = "CustomEntry.primary.TEntry"
-    COMBOBOX_STYLE_NAME:Final[str] = "CustomComboBox.primary.TCombobox"
-    SCALE_STYLE_NAME:Final[str] = "Horizontal.TScale"
-    SCALE_LABEL_STYLE_NAME:Final[str] = "CustomScale.primary.TLabel"
-    RADIOBUTTON_STYLE_NAME:Final[str] = "CustomRadiobutton.primary.TRadiobutton"
-    FRAME_LABEL_STYLE_NAME:Final[str] = "CustomLabelFrame.primary.TLabelframe"
-    TEXT_STYLE_NAME:Final[str] = "CustomTextBox.primary.TText"
-    BUTTON_STYLE_NAME:Final[str] = "CustomButtom.primary.TButton"
-    SEPARATOR_STYLE_NAME:Final[str] = "CustomSeparator.primary.TSeparator"
-    PROGRESS_BAR_STYLE_NAME:Final[str] = 'CustomProgressbar.primary.Horizontal.TProgressbar'
+    #LABEL_NORMAL_STYLE_NAME:Final[str] = "CustomLabelNormal.primary.TLabel"
+    #LABEL_INFORMATION_STYLE_NAME:Final[str] = "CustomLabelInformation.primary.TLabel"
+    #LABEL_COUNT_STYLE_NAME:Final[str] = "CustomLabelCount.primary.TLabel"
+    #LABEL_SUMMARY_STYLE_NAME:Final[str] = "CustomLabelSummary.primary.TLabel"
+    #LABEL_LINK_STYLE_NAME:Final[str] = "CustomLabelLink.primary.TLabel"
+    #ENTRY_STYLE_NAME:Final[str] = "CustomEntry.primary.TEntry"
+    #COMBOBOX_STYLE_NAME:Final[str] = "CustomComboBox.primary.TCombobox"
+    #SCALE_STYLE_NAME:Final[str] = "Horizontal.TScale"
+    #SCALE_LABEL_STYLE_NAME:Final[str] = "CustomScale.primary.TLabel"
+    #RADIOBUTTON_STYLE_NAME:Final[str] = "CustomRadiobutton.primary.TRadiobutton"
+    #FRAME_LABEL_STYLE_NAME:Final[str] = "CustomLabelFrame.primary.TLabelframe"
+    #TEXT_STYLE_NAME:Final[str] = "CustomTextBox.primary.TText"
+    #BUTTON_STYLE_NAME:Final[str] = "CustomButtom.primary.TButton"
+    #SEPARATOR_STYLE_NAME:Final[str] = "CustomSeparator.primary.TSeparator"
+    #PROGRESS_BAR_STYLE_NAME:Final[str] = 'CustomProgressbar.primary.Horizontal.TProgressbar'
 
     COMBOBOX_WIDTH_DEFAULT:Final[int]=8
     SPINBOX_WIDTH_DEFAULT:Final[int]=5
+    ENTRY_WIDTH_DEFAULT:Final[int]=40
 
     KEYWORD_BACKGROUND:Final[str] = 'background'
     KEYWORD_FOREGROUND:Final[str] = 'foreground'
     KEYWORD_FONT:Final[str] = 'font'
 
-    HELPER_STYLE_NAME:Final[str] = 'CustomStyleHelper.primary'
+    HELPER_STYLE_NAME:Final[str] = 'CustomStyleHelper'
     #endregion
 
     #region Constructor
-    def __init__(self, _settingApp: Setting):
+    def __init__(self, _settingApp: Setting, _style:tb.Style):
         self.settingApp:Setting = _settingApp
 
-        self.__style = tb.Style()
+        self.__style:tb.Style = _style
+        if not self.__style:
+            return
         #--------------------------------------------------------
         # Colors:
         self.ColorPrimary = getattr(self.__style.colors, 'primary')
@@ -214,40 +282,57 @@ class HelperCustomStyle:
         self.__FOREGROUND_TREEVIEW_DEFAULT:Final[str]='#0f141c'
         self.__BACKGROUND_TREEVIEW_DEFAULT:Final[str]= self.ColorBackground 
 
-        self.__style.configure(self.SCALE_STYLE_NAME, 
+        self.StyleDataList:list[str] = []
+
+        def __setStyleConfigure(styleName:HelperCustomStyleName, **kw):
+            if not self.__style: return
+            self.__style.configure(styleName.label, **kw)
+            if not styleName.label in self.StyleDataList:
+                self.StyleDataList.append(styleName.label)
+
+        def __setStyleMap(styleName:HelperCustomStyleName, **kw):
+            if not self.__style: return
+            self.__style.map(styleName.label, **kw)
+
+
+        __setStyleConfigure(HelperCustomStyleName.PRIMARY_ROUNDTOGGLE_STYLE_NAME,
+                    font=self.settingApp.MakeFont(bold=True, italic=True)
+        )
+
+        __setStyleConfigure(HelperCustomStyleName.SCALE_STYLE_NAME, 
                                font=self.settingApp.MakeFont(size=0.8, italic=True), troughcolor="#1e2530", 
                                groovewidth=6, sliderlength=20)
-        self.__style.configure(self.SCALE_LABEL_STYLE_NAME, 
+        __setStyleConfigure(HelperCustomStyleName.SCALE_LABEL_STYLE_NAME, 
                                font=self.settingApp.MakeFont(bold=True, italic=True))
-        self.__style.configure(self.LABEL_NORMAL_STYLE_NAME, 
+        __setStyleConfigure(HelperCustomStyleName.LABEL_NORMAL_STYLE_NAME, 
                                font=self.settingApp.MakeFont(1.1, italic=True, bold=True), 
                                foreground="#e0e0e0")
-        self.__style.configure(self.LABEL_INFORMATION_STYLE_NAME, 
+        __setStyleConfigure(HelperCustomStyleName.LABEL_INFORMATION_STYLE_NAME, 
                                font=self.settingApp.MakeFont(1.1, italic=True, bold=True), 
                                foreground="#778899")
-        self.__style.configure(self.LABEL_SUMMARY_STYLE_NAME, 
+        __setStyleConfigure(HelperCustomStyleName.LABEL_SUMMARY_STYLE_NAME, 
                                font=self.settingApp.MakeFont(1.3, italic=True, bold=True), 
                                foreground=self.ColorForeground)
-        self.__style.configure(self.LABEL_COUNT_STYLE_NAME, 
+        __setStyleConfigure(HelperCustomStyleName.LABEL_COUNT_STYLE_NAME, 
                                font=self.settingApp.MakeFont(1.3, bold=True, italic=True), 
                                foreground="#778899")
-        self.__style.configure(self.LABEL_LINK_STYLE_NAME, 
+        __setStyleConfigure(HelperCustomStyleName.LABEL_LINK_STYLE_NAME, 
                                font=self.settingApp.MakeFont(italic=True), 
                                foreground="#3498db")
-        self.__style.configure(self.ENTRY_STYLE_NAME, font=self.settingApp.DefaultFont)
+        __setStyleConfigure(HelperCustomStyleName.ENTRY_STYLE_NAME, font=self.settingApp.DefaultFont)
 
         #--------------------------------------------------------
         # FrameLabel
         #--------------------------------------------------------
-        self.__style.configure(self.FRAME_LABEL_STYLE_NAME, font=self.settingApp.MakeFont(italic=True))
-        self.__style.configure(f"{self.FRAME_LABEL_STYLE_NAME}.Label",
+        __setStyleConfigure(HelperCustomStyleName.FRAME_LABEL_STYLE_NAME, font=self.settingApp.MakeFont(italic=True))
+        __setStyleConfigure(HelperCustomStyleName.FRAME_LABEL_STYLE_LABEL_NAME,
             font=self.settingApp.MakeFont(italic=True, bold=True, size=1.2),
             foreground="#ffffff",
         )
         #--------------------------------------------------------
         # Combobox
         #--------------------------------------------------------
-        self.__style.configure(self.COMBOBOX_STYLE_NAME, font=self.settingApp.DefaultFont)
+        __setStyleConfigure(HelperCustomStyleName.COMBOBOX_STYLE_NAME, font=self.settingApp.DefaultFont)
         self.ComboboxPopdownSettings = {
                                         "-background": "#2b2b2b",
                                         "-foreground": "#ffffff",
@@ -258,7 +343,7 @@ class HelperCustomStyle:
         #--------------------------------------------------------
         # Treeview
         #--------------------------------------------------------
-        self.__style.configure(self.TREEVIEW_STYLE_NAME,
+        __setStyleConfigure(HelperCustomStyleName.TREEVIEW_STYLE_NAME,
                         background=self.__BACKGROUND_TREEVIEW_DEFAULT,
                         foreground='#f2f2f2',
                         fieldbackground="#1e2530",
@@ -266,20 +351,21 @@ class HelperCustomStyle:
                         font=self.settingApp.MakeFont(italic=True),
                         borderwidth=0,
                     )
-        self.__style.configure(self.TREEVIEW_STYLE_NAME + ".Heading",
+        __setStyleConfigure(HelperCustomStyleName.TREEVIEW_STYLE_HEADING_NAME,
                         background='#000000',
                         foreground="#f2f2f2",
                         font=self.settingApp.MakeFont(bold=True, italic=True),
                         relief="flat",
                         padding=8,
                     )
-        self.__style.map(self.TREEVIEW_STYLE_NAME, 
-                         background=[("selected", "#d7d7d7")], foreground=[("selected", "#000000")])
-        self.__style.map(self.TREEVIEW_STYLE_NAME + ".Heading", background=[("active", "#192231")])
+        __setStyleMap(HelperCustomStyleName.TREEVIEW_STYLE_NAME, 
+                        background=[("selected", "#d7d7d7")], foreground=[("selected", "#000000")])
+        __setStyleMap(HelperCustomStyleName.TREEVIEW_STYLE_HEADING_NAME, 
+                        background=[("active", "#192231")])
         #--------------------------------------------------------
         # Checkbutton
         #--------------------------------------------------------
-        self.__style.configure(self.CHECKBOX_STYLE_NAME,
+        __setStyleConfigure(HelperCustomStyleName.CHECKBOX_STYLE_NAME,
             font=self.settingApp.MakeFont(bold=True, italic=True),
             foreground="#e0e0e0",
             background=self.ColorBackground,
@@ -287,7 +373,7 @@ class HelperCustomStyle:
             indicatorforeground="#ffffff",
             padding=6,
         )
-        self.__style.map(self.CHECKBOX_STYLE_NAME,
+        __setStyleMap(HelperCustomStyleName.CHECKBOX_STYLE_NAME,
             indicatorbackground=[("pressed", "#ffffff"), ("selected", "#ffffff"), ("active", "#404040")],
             indicatorforeground=[("selected", "#000000")],
             foreground=[("active", "#ffffff"),  ("disabled", "#555555")],
@@ -297,7 +383,7 @@ class HelperCustomStyle:
         #--------------------------------------------------------
         # Radiobutton
         #--------------------------------------------------------
-        self.__style.configure(self.RADIOBUTTON_STYLE_NAME,
+        __setStyleConfigure(HelperCustomStyleName.RADIOBUTTON_STYLE_NAME,
             font=self.settingApp.MakeFont(bold=True, italic=True),
             foreground="#e0e0e0",
             background=self.ColorBackground,
@@ -306,7 +392,7 @@ class HelperCustomStyle:
             indicatordiameter=14,
             padding=6,
         )
-        self.__style.map(self.RADIOBUTTON_STYLE_NAME,
+        __setStyleMap(HelperCustomStyleName.RADIOBUTTON_STYLE_NAME,
             indicatorbackground=[("pressed", "#ffffff"), ("selected", "#ffffff"), 
                                  ("active", "#404040"), ("disabled", "#222222")],
             indicatorforeground=[("selected", "#000000"), ("disabled", "#555555")],
@@ -317,12 +403,12 @@ class HelperCustomStyle:
         #--------------------------------------------------------
         # Notebook
         #--------------------------------------------------------
-        self.__style.configure(self.NOTEBOOK_STYLE_NAME,
+        __setStyleConfigure(HelperCustomStyleName.NOTEBOOK_STYLE_NAME,
             background="#1e1e1e", 
             borderwidth=0,
             tabmargins=[2, 5, 2, 0],  
         )
-        self.__style.configure(self.NOTEBOOK_STYLE_NAME + ".Tab",
+        __setStyleConfigure(HelperCustomStyleName.NOTEBOOK_STYLE_TAB_NAME,
             background="#2d2d2d",
             foreground="#888888",
             padding=[10, 8],
@@ -330,14 +416,14 @@ class HelperCustomStyle:
             borderwidth=0,
             focuscolor="",
         )
-        self.__style.map(self.NOTEBOOK_STYLE_NAME + ".Tab",
+        __setStyleMap(HelperCustomStyleName.NOTEBOOK_STYLE_TAB_NAME,
             background=[("selected", "#3d3d3d"), ("active", "#333333")],
             foreground=[("selected", "#ffffff"), ("active", "#e0e0e0")],
         )
         #--------------------------------------------------------
         # TextBox:
         #--------------------------------------------------------
-        self.__style.configure(self.TEXT_STYLE_NAME,
+        __setStyleConfigure(HelperCustomStyleName.TEXT_STYLE_NAME,
                 background=self.ColorBackground,
                 foreground=self.ColorForeground,
                 selectbackground='#375a7f',
@@ -352,7 +438,7 @@ class HelperCustomStyle:
         #--------------------------------------------------------
         # Button:
         #--------------------------------------------------------
-        self.__style.configure(self.BUTTON_STYLE_NAME,
+        __setStyleConfigure(HelperCustomStyleName.BUTTON_STYLE_NAME,
                 font=self.settingApp.MakeFont(italic=True),
                 background="#375a7f",
                 foreground="#ffffff",
@@ -363,7 +449,7 @@ class HelperCustomStyle:
                 borderwidth=1,
                 padding=(15, 8),
             )
-        self.__style.map(self.BUTTON_STYLE_NAME,
+        __setStyleMap(HelperCustomStyleName.BUTTON_STYLE_NAME,
                 background=[ ("disabled", "#2b4c68"), ("pressed", "#2b4764"), ("active", "#4b77a9"), ],
                 foreground=[ ("disabled", "#6c757d"), ("pressed", "#ffffff"), ("active", "#ffffff"), ],
                 bordercolor=[("active", "#ffffff"), ("pressed", "#5bc0de")],
@@ -371,11 +457,15 @@ class HelperCustomStyle:
         #--------------------------------------------------------
         # Separator:
         #--------------------------------------------------------
-        self.__style.configure(self.SEPARATOR_STYLE_NAME, background="#2b4c68", darkcolor="#2b4c68", lightcolor="#2b4c68")
-        self.__style.map(self. SEPARATOR_STYLE_NAME, background=[("disabled", "#153248")])
+        __setStyleConfigure(HelperCustomStyleName.SEPARATOR_STYLE_NAME, 
+                background="#2b4c68", darkcolor="#2b4c68", lightcolor="#2b4c68")
+        __setStyleMap(HelperCustomStyleName.SEPARATOR_STYLE_NAME, 
+                background=[("disabled", "#153248")])
 
-        self.__style.configure(
-                self.PROGRESS_BAR_STYLE_NAME,
+        #--------------------------------------------------------
+        # ProgressBar:
+        #--------------------------------------------------------
+        __setStyleConfigure(HelperCustomStyleName.PROGRESS_BAR_STYLE_NAME,
                 thickness=20,  # Grosor/Alto de la barra en píxeles
                 troughcolor="#2c3e50",  # Color del carril/fondo de la barra
                 #background="#1abc9c",  # Color del indicador de relleno (progreso)
@@ -419,12 +509,16 @@ class HelperCustomStyle:
         _tag |= self.__getDictionaryTag(self.KEYWORD_FONT, self.settingApp.MakeFont(size=_size, bold=_bold, italic=_italic))
         return _tag
 
-    def SetHelperStyle(self, _className:str, _background:str='#558833')->str | None:
+    def SetHelperStyle(self, _className:str, _background:str='#558833', _addName:str | None = None)->str | None:
         if not _className: return None
-        result = f"{self.HELPER_STYLE_NAME}.{_className}"
+        result = self.MakeHelperStyleName(_className, _addName)
         if not result: return None
         self.style.configure(result, background=_background)
         return result
+
+    def MakeHelperStyleName(self, _className:str, _addName:str | None = None)->str:
+        return f"{self.HELPER_STYLE_NAME}{(_addName if _addName is not None else '')}.primary.{_className}"
+    
     #endregion
 #endregion
 
@@ -479,9 +573,9 @@ class HelperItemLayoutControls:
 
 #region HelperControlTKinter
 class HelperControlTKinter:
-    def __init__(self, _setting:Setting):
+    def __init__(self, _setting:Setting, _style:tb.Style):
         self.settingApp:Setting = _setting
-        self.cs:HelperCustomStyle= HelperCustomStyle(_setting)
+        self.cs:HelperCustomStyle= HelperCustomStyle(_setting, _style)
     
     #region Methods
     
@@ -779,7 +873,7 @@ class HelperControlTKinter:
             _parent,
             text=f"{text}: ",
             padding=(5, 5),
-            style=self.cs.FRAME_LABEL_STYLE_NAME
+            style=HelperCustomStyleName.FRAME_LABEL_STYLE_NAME.label
         )
         self.__packagingWidget(result, _pack)  
         #if not _pack is None and _pack.isRelief:
@@ -809,7 +903,7 @@ class HelperControlTKinter:
             to=_to,
             takefocus=True,
             variable=_variable,
-            style=self.cs.SCALE_STYLE_NAME
+            style=HelperCustomStyleName.SCALE_STYLE_NAME.label
         )
 
         if _command is not None:
@@ -849,21 +943,23 @@ class HelperControlTKinter:
                 _frame,
                 text=_text,
                 command=_command,
-                style=self.cs.BUTTON_STYLE_NAME
+                style=HelperCustomStyleName.BUTTON_STYLE_NAME.label
             )
             if _state: result.config(state=tk.NORMAL)
             else: result.config(state=tk.DISABLED)            
 
             self.__packagingWidget(result, _pack)
             return result
-    def _getControlLabelBS(self, parent:tk.Misc, _text:str, _type:TKLabelType=TKLabelType.NORMAL, 
-                            _pack:HelperItemLayout=HelperItemLayout(side=tk.NONE, anchor=tk.W, pady=(0, 1)))->tb.Label:
+    def _getControlLabelBS(self, parent:tk.Misc, _text:str, 
+                        _type:TKLabelType=TKLabelType.NORMAL, 
+                        _variable:tk.StringVar | None = None,
+                        _pack:HelperItemLayout=HelperItemLayout(side=tk.NONE, anchor=tk.W, pady=(0, 1)))->tb.Label:
             _setting = None
             match(_type):
-                case TKLabelType.NORMAL: _setting = self.cs.LABEL_NORMAL_STYLE_NAME
-                case TKLabelType.INFORMATION: _setting = self.cs.LABEL_INFORMATION_STYLE_NAME
-                case TKLabelType.COUNT: _setting = self.cs.LABEL_COUNT_STYLE_NAME
-                case TKLabelType.SUMMARY: _setting = self.cs.LABEL_SUMMARY_STYLE_NAME
+                case TKLabelType.NORMAL: _setting = HelperCustomStyleName.LABEL_NORMAL_STYLE_NAME.label
+                case TKLabelType.INFORMATION: _setting = HelperCustomStyleName.LABEL_INFORMATION_STYLE_NAME.label
+                case TKLabelType.COUNT: _setting = HelperCustomStyleName.LABEL_COUNT_STYLE_NAME.label
+                case TKLabelType.SUMMARY: _setting = HelperCustomStyleName.LABEL_SUMMARY_STYLE_NAME.label
             
             result:tb.Label = tb.Label(parent, style=_setting)
     
@@ -871,27 +967,38 @@ class HelperControlTKinter:
                 case TKLabelType.NORMAL | TKLabelType.COUNT: 
                     result.config(text=f"{_text}{":" if len(_text) > 0 else ""}")
                 case TKLabelType.INFORMATION | TKLabelType.SUMMARY: result.config(text="..." if len(_text) == 0 else _text)
+
+            if _variable:
+                result.configure(textvariable=_variable, text=_variable.get())
     
             self.__packagingWidget(result, _pack)
             return result
     def _getControlLabelLinkBS(self, _parent:tk.Misc, _text:str, 
                         _command:Callable[[], Any], 
                         _pack:HelperItemLayout=HelperItemLayout(anchor=tk.E, side=tk.NONE))->tb.Label:
-        result:tb.Label = tb.Label(_parent, text=f"[{_text}]", cursor="hand2", style=self.cs.LABEL_LINK_STYLE_NAME)
+        result:tb.Label = tb.Label(_parent, text=f"[{_text}]", cursor="hand2", 
+                                style=HelperCustomStyleName.LABEL_LINK_STYLE_NAME.label)
         self.__packagingWidget(result, _pack)
         result.bind("<Button-1>", lambda event: _command())
         return result    
     def _getControlEntryBS(self, _parent:tk.Misc, _commandValidate=None, _commandExecute=None, _textVariable=None, 
-                            _pack:HelperItemLayout=HelperItemLayout(side=tk.RIGHT, expand=True, fill=tk.X))->tb.Entry:
+                            _pack:HelperItemLayout=HelperItemLayout(side=tk.RIGHT, expand=True, fill=tk.X),
+                            _status:bool=True,
+                            _width:int|None = None)->tb.Entry:
         result: tb.Entry = tb.Entry(
             _parent,
-            style=self.cs.ENTRY_STYLE_NAME
+            style=HelperCustomStyleName.ENTRY_STYLE_NAME.label
         )
         if not _commandValidate is None:
-            result.config(validate="key", validatecommand=_commandValidate)
+            result.configure(validate="key", validatecommand=_commandValidate)
 
         if not _textVariable is None:
-            result.config(textvariable=_textVariable)
+            result.configure(textvariable=_textVariable)
+
+        result.configure(state=(tk.NORMAL if _status else tk.DISABLED))  
+        if not _width is None:
+            result.configure(width=_width)
+
         self.__packagingWidget(result, _pack)
         if not _commandExecute is None:
             result.bind("<Return>", _commandExecute)
@@ -901,9 +1008,32 @@ class HelperControlTKinter:
     def _getControlEntryWithLabelBS(self, _parent:tk.Misc, _text:str, _commandValidate=None, 
                             _commandExecute=None, _textVariable:tk.Variable | None=None, 
                             _pack:HelperItemLayout=HelperItemLayout(side=tk.LEFT, expand=True, fill=tk.X), 
-                            _addSeparator:bool=False)->tb.Entry:
+                            _addSeparator:bool=False,
+                            _status:bool=True,
+                            _width:int | None = None)->tb.Entry:
         _frame:tb.Frame = self.__getFrameWithLabelBS(_parent, _text, _addSeparator, _pack)[0]
-        result:tb.Entry = self._getControlEntryBS(_frame, _commandValidate=_commandValidate, _commandExecute=_commandExecute, _textVariable=_textVariable, _pack=_pack)
+        result:tb.Entry = self._getControlEntryBS(_frame, _commandValidate=_commandValidate, 
+                                    _commandExecute=_commandExecute, 
+                                    _textVariable=_textVariable, _pack=_pack,
+                                    _status=_status,
+                                    _width=_width)
+        return result
+    def _getControlEntryWithLabelWidthBS(self, _parent:tk.Misc, _text:str, _commandValidate=None, 
+                            _commandExecute=None, _textVariable:tk.Variable | None=None, 
+                            _pack:HelperItemLayout=HelperItemLayout(side=tk.LEFT, expand=True, fill=tk.X), 
+                            _addSeparator:bool=False,
+                            _status:bool=True,
+                            _width:int | None = None)->tb.Entry:
+        if not _width:
+            _width = self.cs.ENTRY_WIDTH_DEFAULT
+        result:tb.Entry = self._getControlEntryWithLabelBS(_parent, _text, 
+                                    _commandValidate=_commandValidate, 
+                                    _commandExecute=_commandExecute, 
+                                    _textVariable=_textVariable, 
+                                    _pack=_pack,
+                                    _addSeparator=_addSeparator,
+                                    _status=_status,
+                                    _width=_width)
         return result
     def _getControlComboBoxBS(self, _parent:tk.Misc, _values:list | None=None, 
                             _defaultValue=None, _command=None, 
@@ -912,7 +1042,7 @@ class HelperControlTKinter:
         result: tb.Combobox = tb.Combobox(
             _parent,
             state="readonly",
-            style=self.cs.COMBOBOX_STYLE_NAME,
+            style=HelperCustomStyleName.COMBOBOX_STYLE_NAME.label
         )
         if not _values is None: 
             result.config(values=_values)
@@ -970,7 +1100,8 @@ class HelperControlTKinter:
 
         return result
     def _getControlSeparatorBS(self, _parent:tk.Misc, _orient:str=tk.VERTICAL, _pad:int=0)->tb.Separator:
-        result: tb.Separator = tb.Separator(_parent, orient=_orient, style=self.cs.SEPARATOR_STYLE_NAME)
+        result: tb.Separator = tb.Separator(_parent, orient=_orient, 
+                                style=HelperCustomStyleName.SEPARATOR_STYLE_NAME.label)
         if _pad < 0: _pad=0
         match (_orient):
             case tk.HORIZONTAL: result.pack(side=tk.TOP, fill=tk.X, expand=False, padx=0, pady=_pad)
@@ -1021,7 +1152,7 @@ class HelperControlTKinter:
             #columns=_columnsGrid,
             show="headings",
             selectmode="browse",
-            style=self.cs.TREEVIEW_STYLE_NAME
+            style=HelperCustomStyleName.TREEVIEW_STYLE_NAME.label
         )
         self._setControlTreeviewLayoutBS(result, _setting)
         '''
@@ -1064,7 +1195,7 @@ class HelperControlTKinter:
             _parent,
             text=_text,
             variable=_variable,
-            style=self.cs.CHECKBOX_STYLE_NAME
+            style=HelperCustomStyleName.CHECKBOX_STYLE_NAME.label
         )
         if _command: result.configure(command=_command)
         self.__packagingWidget(result, _pack)
@@ -1072,7 +1203,7 @@ class HelperControlTKinter:
             ToolTip(result, _tooltip, self.settingApp.MakeFont(size=1.2, italic=True))
         return result
     def _getControlNotebookBS(self, _parent:tk.Misc)->tb.Notebook: 
-        result:tb.Notebook = tb.Notebook(_parent, style=self.cs.NOTEBOOK_STYLE_NAME)
+        result:tb.Notebook = tb.Notebook(_parent, style=HelperCustomStyleName.NOTEBOOK_STYLE_NAME.label)
         result.pack(fill=tk.BOTH, expand=True)
 
         return result
@@ -1084,7 +1215,7 @@ class HelperControlTKinter:
             text=_text,
             value=_value,
             variable=_variable,
-            style=self.cs.RADIOBUTTON_STYLE_NAME
+            style=HelperCustomStyleName.RADIOBUTTON_STYLE_NAME.label
         )
         if _command: result.configure(command=_command)
         self.__packagingWidget(result, _pack)
@@ -1126,7 +1257,7 @@ class HelperControlTKinter:
             )
         self.__packagingWidget(result, _pack)
         return result
-    def _getControlProgressBarBS(self, _parent:tk.Misc, _text:str, 
+    def _getControlProgressBarBS(self, _parent:tk.Misc, _text:str | None = None, 
                             _mode:str | None = 'determinate', 
                             _maximum:float=100.0,
                             _variable:tk.DoubleVar | None = None,
@@ -1137,14 +1268,18 @@ class HelperControlTKinter:
                 _maximum=100.0
             if not _variable: 
                 _variable = tk.DoubleVar(value=0.0)
+            _text = (_text if _text else '')
+            _packWidth:HelperItemLayout = _pack.clone()
+            _pack.configure(width = None)
+            
             _frame:tb.Frame 
             _label:tb.Label | None
-            _frame, _label = self.__getFrameWithLabelBS(_parent, _text, False, _pack, _forceLabel=True)
+            _frame, _label = self.__getFrameWithLabelBS(_parent, _text, False, _packWidth, _forceLabel=True)
             result: tb.Progressbar = tb.Progressbar(
                 _frame,
                 mode=_mode,
                 maximum=_maximum,
-                style=self.cs.PROGRESS_BAR_STYLE_NAME
+                style=HelperCustomStyleName.PROGRESS_BAR_STYLE_NAME.label
             )
             if _variable: 
                 result.configure(variable=_variable)
@@ -1159,9 +1294,14 @@ class HelperControlTKinter:
             except:
                 pass
             return result
-    def _getControlCheckboxList(self, _parent:tk.Misc, _text:str | None = None, data:list[str] = [], 
-                    _pack:HelperItemLayout=HelperItemLayout(side=tk.LEFT, fill=tk.BOTH, expand=True))->'ScrolledCheckboxList':
+    def _getControlCheckboxList(self, _parent:tk.Misc, _text:str | None = None, data:list[tuple[str, bool]] = [], 
+                    _pack:HelperItemLayout=HelperItemLayout(side=tk.LEFT, fill=tk.BOTH, expand=False))->'ScrolledCheckboxList':
         result:ScrolledCheckboxList = ScrolledCheckboxList(_parent, _text, data)
+        self.__packagingWidget(result, _pack)
+        return result
+    def _getControlProgressList(self, _parent:tk.Misc, _text:str | None = None, data:list[str] = [], 
+                    _pack:HelperItemLayout=HelperItemLayout(side=tk.LEFT, fill=tk.BOTH, expand=False))->'ScrolledProgressList':
+        result:ScrolledProgressList = ScrolledProgressList(_parent, _text, data)
         self.__packagingWidget(result, _pack)
         return result
     #endregion
@@ -1200,8 +1340,12 @@ class HelperControlTKinter:
 
         if _hasText or _forceLabel:
             _textEnd = _text if _hasText else ''
-            _label = tb.Label(_frame, text=f"{_textEnd}{(":" if _hasText else "")}", anchor=tk.W, style=self.cs.SCALE_LABEL_STYLE_NAME)
+            _label = tb.Label(_frame, text=f"{_textEnd}{(":" if _hasText else "")}", anchor=tk.W, 
+                              style=HelperCustomStyleName.SCALE_LABEL_STYLE_NAME.label)
             _label.pack(side=tk.LEFT, padx=(0, 2))
+            if _forceLabel and not _pack is None and _pack.width:
+                _label.configure(width=_pack.width)
+                _label.pack_propagate(False)
         return (_frame , _label)
     
     def GetFrameWithSeperator(self, _parent:tk.Misc, _pack:HelperItemLayout | None = None, _pad:int=0)->tb.Frame:
@@ -1254,12 +1398,14 @@ class HelperControlTKinter:
 
 #region HelperControl
 class HelperControl:
-    def __init__(self, _settingApp: Setting, styleType: ControlStyleType=ControlStyleType.NORMAL):
+    def __init__(self, _settingApp: Setting, 
+                _style:tb.Style,
+                _styleType: ControlStyleType=ControlStyleType.NORMAL):
         self.settingApp: Setting = _settingApp
-        self.styleType: ControlStyleType = styleType
-        self.cs:HelperCustomStyle = HelperCustomStyle(_settingApp)
+        self.styleType: ControlStyleType = _styleType
+        self.cs:HelperCustomStyle = HelperCustomStyle(_settingApp, _style)
         self.il:HelperItemLayoutControls = HelperItemLayoutControls()
-        self.ct:HelperControlTKinter = HelperControlTKinter(_settingApp)
+        self.ct:HelperControlTKinter = HelperControlTKinter(_settingApp, _style)
     
     #region Properties:
     @property
@@ -1310,7 +1456,7 @@ class HelperControl:
         return self.ControlFrame(_parent, _pack)
     def ControlFrameForRowEnd(self, _parent:tk.Misc, 
                 _pack:HelperItemLayout=HelperItemLayout(side=tk.TOP, 
-                        expand=False, fill=tk.X, padx=(0, 0), pady=(0, 0)))->tb.Frame:
+                        expand=True, fill=tk.BOTH, padx=(0, 0), pady=(0, 0)))->tb.Frame:
         _pack.configure(side=tk.TOP)
         return self.ControlFrame(_parent, _pack)
     def ControlFrameForColumn(self, _parent:tk.Misc, 
@@ -1368,33 +1514,38 @@ class HelperControl:
     
     #region Label:
     def ControlLabel(self, _parent:tk.Misc, _text:str, _type:TKLabelType=TKLabelType.NORMAL, 
+                    _variable:tk.StringVar | None = None,
                     _pack:HelperItemLayout=HelperItemLayout(side=tk.NONE, anchor=tk.W, pady=(0, 1)))->tb.Label:
-            return self.ct._getControlLabelBS(_parent, _text, _type, _pack)
-    def ControlLabelLEFT(self, _parent:tk.Misc, _text:str, _type:TKLabelType=TKLabelType.NORMAL)->tb.Label:
+            return self.ct._getControlLabelBS(_parent, _text, _type, _variable, _pack)
+    def ControlLabelLEFT(self, _parent:tk.Misc, _text:str, _type:TKLabelType=TKLabelType.NORMAL,
+                        _variable:tk.StringVar | None = None)->tb.Label:
         _pack = self.il._getHelperItemLayoutLabel(side=tk.LEFT)
-        return self.ControlLabel(_parent, _text, _type, _pack)
-    def ControlLabelRIGHT(self, _parent:tk.Misc, _text:str, _type:TKLabelType=TKLabelType.NORMAL)->tb.Label:
+        return self.ControlLabel(_parent, _text, _type, _variable, _pack)
+    def ControlLabelRIGHT(self, _parent:tk.Misc, _text:str, _type:TKLabelType=TKLabelType.NORMAL,
+                        _variable:tk.StringVar | None = None)->tb.Label:
         _pack = self.il._getHelperItemLayoutLabel(side=tk.RIGHT)
-        return self.ControlLabel(_parent, _text, _type, _pack)
-    def ControlLabelInfo(self, _parent:tk.Misc, _text:str)->tb.Label:
+        return self.ControlLabel(_parent, _text, _type, _variable, _pack)
+    def ControlLabelInfo(self, _parent:tk.Misc, _text:str, _variable:tk.StringVar | None = None)->tb.Label:
         _pack = self.il._getHelperItemLayoutLabel(side=tk.TOP)
-        return self.ControlLabel(_parent, _text, TKLabelType.INFORMATION, _pack)
-    def ControlLabelInfoLEFT(self, _parent:tk.Misc, _text:str)->tb.Label:
+        return self.ControlLabel(_parent, _text, TKLabelType.INFORMATION, _variable, _pack)
+    def ControlLabelInfoLEFT(self, _parent:tk.Misc, _text:str, _variable:tk.StringVar | None = None)->tb.Label:
         _pack = self.il._getHelperItemLayoutLabel(side=tk.LEFT)
-        return self.ControlLabel(_parent, _text, TKLabelType.INFORMATION, _pack)
-    def ControlLabelInfoRIGHT(self, _parent:tk.Misc, _text:str)->tb.Label:
+        return self.ControlLabel(_parent, _text, TKLabelType.INFORMATION, _variable, _pack)
+    def ControlLabelInfoRIGHT(self, _parent:tk.Misc, _text:str, _variable:tk.StringVar | None = None)->tb.Label:
         _pack = self.il._getHelperItemLayoutLabel(side=tk.RIGHT)
-        return self.ControlLabel(_parent, _text, TKLabelType.INFORMATION, _pack)
-    def ControlLabelSummary(self, _parent:tk.Misc, _text:str)->tb.Label:
+        return self.ControlLabel(_parent, _text, TKLabelType.INFORMATION, _variable, _pack)
+    def ControlLabelSummary(self, _parent:tk.Misc, _text:str, _variable:tk.StringVar | None = None)->tb.Label:
         _pack = self.il._getHelperItemLayoutLabel(side=tk.TOP).configure(pady=(2, 2))
-        return self.ControlLabel(_parent, _text, TKLabelType.SUMMARY, _pack)
-    def ControlLabelCountRIGHT(self, _parent:tk.Misc, _text:str, _addSeparator:bool=False)->tb.Label:        
+        return self.ControlLabel(_parent, _text, TKLabelType.SUMMARY, _variable, _pack)
+    def ControlLabelCountRIGHT(self, _parent:tk.Misc, _text:str, 
+                            _variable:tk.StringVar | None = None,
+                            _addSeparator:bool=False)->tb.Label:        
         _pack = self.il._getHelperItemLayoutLabel(side=tk.RIGHT)
         _frame:tk.Misc = _parent if not _addSeparator else self.ct.GetFrameWithSeperator(_parent, _pack, 5)
-        return self.ControlLabel(_frame, _text, TKLabelType.COUNT, _pack)
-    def ControlLabelCountLEFT(self, _parent:tk.Misc, _text:str)->tb.Label:
+        return self.ControlLabel(_frame, _text, TKLabelType.COUNT, _variable, _pack)
+    def ControlLabelCountLEFT(self, _parent:tk.Misc, _text:str, _variable:tk.StringVar | None = None)->tb.Label:
         _pack = self.il._getHelperItemLayoutLabel(side=tk.LEFT)
-        return self.ControlLabel(_parent, _text, TKLabelType.COUNT, _pack)
+        return self.ControlLabel(_parent, _text, TKLabelType.COUNT, _variable, _pack)
     #endregion
     
     #region LabelLink
@@ -1405,13 +1556,26 @@ class HelperControl:
     
     #region Entry:
     def ControlEntry(self, _parent:tk.Misc, _commandValidate=None, _commandExecute=None, _textVariable=None, 
-                            _pack:HelperItemLayout=HelperItemLayout(side=tk.RIGHT, expand=True, fill=tk.X))->tb.Entry:
-        return self.ct._getControlEntryBS(_parent, _commandValidate, _commandExecute, _textVariable, _pack)
+                            _pack:HelperItemLayout=HelperItemLayout(side=tk.RIGHT, expand=True, fill=tk.X),
+                            _status:bool=True, 
+                            _width:int | None = None)->tb.Entry:
+        return self.ct._getControlEntryBS(_parent, _commandValidate, _commandExecute, _textVariable, _pack, _status)
     def ControlEntryWithLabel(self, _parent:tk.Misc, _text:str, _commandValidate=None, 
                         _commandExecute=None, _textVariable:tk.Variable | None=None, 
                         _pack:HelperItemLayout=HelperItemLayout(side=tk.LEFT, expand=False, fill=tk.X), 
-                        _addSeparator:bool=False)->tb.Entry:
-        return self.ct._getControlEntryWithLabelBS(_parent, _text, _commandValidate, _commandExecute, _textVariable, _pack, _addSeparator)
+                        _addSeparator:bool=False,
+                        _status:bool=True,
+                        _width:int | None = None)->tb.Entry:
+        return self.ct._getControlEntryWithLabelBS(_parent, _text, _commandValidate, _commandExecute, 
+                            _textVariable, _pack, _addSeparator, _status, _width)
+    def ControlEntryWithLabelWidth(self, _parent:tk.Misc, _text:str, _commandValidate=None, 
+                        _commandExecute=None, _textVariable:tk.Variable | None=None, 
+                        _pack:HelperItemLayout=HelperItemLayout(side=tk.LEFT, expand=False, fill=tk.X), 
+                        _addSeparator:bool=False,
+                        _status:bool=True,
+                        _width:int | None = None)->tb.Entry:
+        return self.ct._getControlEntryWithLabelWidthBS(_parent, _text, _commandValidate, _commandExecute, 
+                            _textVariable, _pack, _addSeparator, _status, _width)
     #endregion
     
     #region ComboBox:
@@ -1420,7 +1584,7 @@ class HelperControl:
                         _textVariable:tk.StringVar | None = None,
                         _pack:HelperItemLayout=HelperItemLayout(side=tk.LEFT, expand=True, fill=tk.X))->tb.Combobox:
         return self.ct._getControlComboBoxBS(_parent, _values, _defaultValue, 
-                                             _command, _textVariable, _pack)
+                                                _command, _textVariable, _pack)
     def ControlComboBoxWithLabel(self, _parent:tk.Misc, _text:str, 
                         _values:list | None=None, _defaultValue=None, _command=None, 
                         _textVariable:tk.StringVar | None = None,
@@ -1528,32 +1692,101 @@ class HelperControl:
                             _mode:str | None = 'determinate', 
                             _maximum:float=100.0,
                             _variable:tk.DoubleVar | None = None,
-                            _pack:HelperItemLayout=HelperItemLayout(side=tk.TOP, fill=tk.X, expand=True))->tb.Progressbar:
-        return self.ct._getControlProgressBarBS(_parent, (_text if _text else ''), _mode, _maximum, _variable, _pack)
+                            _width:int|None = None)->tb.Progressbar:
+        _pack:HelperItemLayout=HelperItemLayout(side=tk.TOP, fill=tk.X, expand=True, width=_width)
+        return self.ct._getControlProgressBarBS(_parent, _text, _mode, _maximum, _variable, _pack)
     def ControlProgressBarLEFT(self, _parent:tk.Misc, _text:str | None = None, 
                             _maximum:float=100.0,
-                            _variable:tk.DoubleVar | None = None)->tb.Progressbar:
+                            _variable:tk.DoubleVar | None = None,
+                            _width:int|None = None)->tb.Progressbar:
         _mode:str = 'determinate'
-        _pack:HelperItemLayout = self.il._getHelperItemLayoutProgressBar(side=tk.LEFT)
-        return self.ControlProgressBar(_parent, _text, _mode, _maximum, _variable, _pack)
+        _pack:HelperItemLayout = self.il._getHelperItemLayoutProgressBar(side=tk.LEFT, width=_width)
+        return self.ct._getControlProgressBarBS(_parent, _text, _mode, _maximum, _variable, _pack)
     #endregion
 
     #region CheckboxList:
-    def ControlScrolledCheckboxList(self, _parent:tk.Misc, _text:str | None = None, data:list[str] = [], 
+    def ControlScrolledCheckboxList(self, _parent:tk.Misc, _text:str | None = None, _data:list[tuple[str, bool]] = [], 
                 _pack:HelperItemLayout=HelperItemLayout(side=tk.LEFT, fill=tk.BOTH, expand=True))->'ScrolledCheckboxList':
-        return self.ct._getControlCheckboxList(_parent, _text, data, _pack)
+        return self.ct._getControlCheckboxList(_parent, _text, _data, _pack)
+    #endregion
+
+    #region ProgressList:
+    def ControlScrolledProgressList(self, _parent:tk.Misc, _text:str | None = None, _data:list[str] = [], 
+                _pack:HelperItemLayout=HelperItemLayout(side=tk.LEFT, fill=tk.BOTH, expand=True))->'ScrolledProgressList':
+        return self.ct._getControlProgressList(_parent, _text, _data, _pack)
     #endregion
 
     #endregion
 
     #region Helper
-    def SetHelperStyle(self, _control:ttk.Widget, _background:str='#558833'):
+    def SetHelperStyle(self, _control:ttk.Widget, _background:str='#558833', _addName:str | None = None):
         _className:str = _control.winfo_class()
         if not _className: return
-        _style:str | None = self.cs.SetHelperStyle(_className, _background)
+        _style:str | None = self.cs.SetHelperStyle(_className, _background, _addName)
         if not _style: return
         _control['style']=_style
 
+    def GetMeasureString(self, text: str, _control:tk.Widget) -> int:
+            if not text or len(text)<=0: return 0
+            _font:tkFont.Font = self.__GetStyleFont(_control.winfo_class())
+
+            if not _font: 
+                return len(text)
+            result:int = _font.measure(text)
+            return result
+
+    def GetMeasureStringMax(self, text:list[str], _control:tk.Widget) -> int:
+        if not text or len(text)<=0: return 0
+        result:int = max([self.GetMeasureString(s, _control) for s in text])
+        return result
+
+    def __GetConvertPixelsToCharWidth(self, _font:tkFont.Font, maxPX:int, _paddingChars:int=1) -> int:
+        _charZero = _font.measure("0")
+        if _charZero <= 0:
+            _charZero = 8  
+            
+        result = math.ceil(maxPX / _charZero)
+        _paddingChars = _paddingChars if _paddingChars > 0 else 1
+        return result + _paddingChars
+    
+    def GetMaxCharWidth(self, _control:tk.Widget, data:list[str], _addText:str | None = None, _paddingChars:int=1) -> int:
+        if not _control or not data: return 0
+        _dataAdd:list[str] = data if not _addText else [s + _addText for s in data] 
+        _font:tkFont.Font = self.__GetStyleFont(_control.winfo_class())
+        if not _font: return max([len(s) for s in _dataAdd])
+        maxPX = max([self.GetMeasureString(s,_control) for s in _dataAdd])
+        return self.__GetConvertPixelsToCharWidth(_font, maxPX, _paddingChars)
+
+    def __GetStyleFont(self, styleName: str = "TLabel") -> tkFont.Font:
+        resultDefault:tkFont.Font = self.settingApp.MakeFont(1.1, italic=True, bold=True)
+        #style = tb.Style.get_instance()
+        style = self.cs.style
+        if not style: return resultDefault
+        
+        # Busca la propiedad 'font' del estilo indicado
+        font_spec = style.lookup(styleName, "font", default=style.lookup('TLabel', 'font'))
+
+        # Si el estilo no tiene una fuente explícita, hace fallback a la fuente por defecto
+        if not font_spec:
+            return resultDefault
+
+        # Convertir a objeto tkFont.Font
+        if isinstance(font_spec, str):
+            try:
+                return tkFont.nametofont(font_spec)
+            except tk.TclError:
+                return tkFont.Font(family=font_spec)
+        elif isinstance(font_spec, (tuple, list)):
+            return tkFont.Font(font=font_spec)
+        elif isinstance(font_spec, tkFont.Font):
+            return font_spec
+        else:
+            return resultDefault
+
+    def GetStyleByName(self, styleName: HelperCustomStyleName) -> dict:
+        result = self.cs.style.configure(styleName.label)
+        return result
+        
     def __GetStructTreeview(self, df:pd.DataFrame)->list[ItemStructTreeview]:
         result:list[ItemStructTreeview] = []
         if df.empty:
@@ -1575,12 +1808,16 @@ class ScrolledCheckboxList(tb.Labelframe):
             self,
             parent: tk.Misc,
             _text:str | None = None,
-            items: list[str] | None = None,
+            items: list[tuple[str, bool]] | None = None,
             bootstyle: str = "primary-round-toggle"):
         super().__init__(parent)
 
-        _hc = HelperControlTKinter(Setting())
+        _setting:Setting = Setting()
+        _style:tb.Style = HelperStyle.GetStyle(parent)
+        _hc = HelperControlTKinter(_setting, _style)
+        _cs = HelperCustomStyle(_setting, _style)
 
+        self['style'] = HelperCustomStyleName.FRAME_LABEL_STYLE_NAME.label
         self.bootstyle = bootstyle
         self.vars: dict[str, tk.BooleanVar] = {}
         self._setSelectAll:tk.BooleanVar = tk.BooleanVar(value=True)
@@ -1590,7 +1827,8 @@ class ScrolledCheckboxList(tb.Labelframe):
         if _hasText: self.configure(text=_text)
 
         _frmRowSelectAll:tb.Frame = _hc._getControlFrameBS(self, _pack=HelperItemLayout(side=tk.TOP, 
-                                expand=True, fill=tk.X, padx=(0, 0), pady=(0, 0)))
+                                expand=False, fill=tk.X, padx=(0, 0), pady=(0, 0)))
+        
         self._chkSelectAll = tb.Checkbutton(
             _frmRowSelectAll,
             text='Select all',
@@ -1598,7 +1836,7 @@ class ScrolledCheckboxList(tb.Labelframe):
             bootstyle=self.bootstyle,
             command=lambda: self.SelectAll(self._setSelectAll.get())
         )
-        self._chkSelectAll.pack(anchor=tk.E, pady=(0, 0), padx=(0, 0), side=tk.RIGHT)
+        self._chkSelectAll.pack(anchor=tk.E, pady=(5, 0), padx=(0, 10), side=tk.RIGHT)
 
         self.scroll_frame = tb.ScrolledFrame(self, autohide=True)
         self.scroll_frame.pack(fill=tk.BOTH, expand=True)
@@ -1606,6 +1844,7 @@ class ScrolledCheckboxList(tb.Labelframe):
         if items and len(items) > 0:
             self.SetItems(items)
 
+    '''
     def SetItems(self, items:list[str], _state:bool=True)->None:
         for widget in self.scroll_frame.winfo_children():
             widget.destroy()
@@ -1617,7 +1856,7 @@ class ScrolledCheckboxList(tb.Labelframe):
 
         for item in items:
             var = tk.BooleanVar(value=_state)
-            var.trace_add('write', lambda *args: self._update_select_all_state())
+            var.trace_add('write', lambda *args: self.__UpdateSelectAllState())
             self.vars[item] = var
 
             chk = tb.Checkbutton(
@@ -1629,8 +1868,34 @@ class ScrolledCheckboxList(tb.Labelframe):
             chk.pack(anchor=tk.W, pady=(0, 1), padx=(1, 0))
 
         self._setSelectAll.set(_state if has_items else False)
+    '''
 
-    def _update_select_all_state(self) -> None:
+    def SetItems(self, items:list[tuple[str, bool]])->None:
+        for widget in self.scroll_frame.winfo_children():
+            widget.destroy()
+
+        self.vars.clear()
+
+        has_items = bool(items)
+        self._chkSelectAll.configure(state=(tk.NORMAL if has_items else tk.DISABLED))
+
+        for item, _value in items:
+            var = tk.BooleanVar(value=_value)
+            var.trace_add('write', lambda *args: self.__UpdateSelectAllState())
+            self.vars[item] = var
+
+            chk = tb.Checkbutton(
+                self.scroll_frame,
+                text=item,
+                variable=var,
+                bootstyle=self.bootstyle,
+            )
+            chk.pack(anchor=tk.W, pady=(0, 1), padx=(1, 0))
+
+        _state:bool = all(s for _, s in items)
+        self._setSelectAll.set(_state if has_items else False)
+
+    def __UpdateSelectAllState(self) -> None:
         if self._isUpdatingAll or not self.vars: return
         allChecked:bool = all(var.get() for var in self.vars.values())
         self._setSelectAll.set(allChecked)
@@ -1642,5 +1907,102 @@ class ScrolledCheckboxList(tb.Labelframe):
         for var in self.vars.values():
             var.set(state)
 
+class ScrolledProgressList(tb.Labelframe):
+    DEFAULT_TEXT_SUFIX_PROGRESS:Final[str] = ' => (100.00%)'
+    def __init__(
+            self,
+            parent: tk.Misc,
+            _text: str | None = None,
+            items: list[str] | None = None,
+            bootstyle: str = "primary-animated-striped"):
+        super().__init__(parent)
+
+        _setting:Setting=Setting()
+        _style:tb.Style = HelperStyle.GetStyle(parent)
+        self._hc = HelperControl(_setting, _style)
+        self._cs = HelperCustomStyle(_setting, _style)
+
+        self['style'] = HelperCustomStyleName.FRAME_LABEL_STYLE_NAME.label
+        self.bootstyle = bootstyle
+        
+        self.pbars: dict[str, tb.Progressbar] = {}
+        self.vars: dict[str, tk.DoubleVar] = {}
+
+        _hasText: bool = bool(_text)
+        if _hasText: 
+            self.configure(text=_text)
+
+        _frmRowOverall: tb.Frame = self._hc.ControlFrameForRow(self)
+
+        self._varOverallText = tk.DoubleVar(value=0)
+        self._pbarOverall = self._hc.ControlProgressBarLEFT(_frmRowOverall, _variable= self._varOverallText)
+
+        # --- Frame Inferior: Contenedor Scrollable ---
+        self.scroll_frame = tb.ScrolledFrame(self, autohide=True)
+        self.scroll_frame.pack(fill=tk.BOTH, expand=True)
+
+        if items and len(items) > 0:
+            self.SetItems(items)
+
+    def SetItems(self, items: list[str], _startValue: float = 0.0) -> None:
+        """Inicializa las barras de progreso para la lista de ítems recibida."""
+        for widget in self.scroll_frame.winfo_children():
+            widget.destroy()
+
+        self.pbars.clear()
+        self.vars.clear()
+
+        has_items = bool(items)
+        if not has_items: return
+        _maxLen = self._hc.GetMaxCharWidth(self._pbarOverall, items, _addText = self.DEFAULT_TEXT_SUFIX_PROGRESS)
+        for item in items:
+            
+            # Variable vinculada al avance del ítem y traza para recalcular el general
+            var = tk.DoubleVar(value=_startValue)
+            var.trace_add('write', lambda *args: self.__UpdateOverallState())
+            self.vars[item] = var
+            pbar = self._hc.ControlProgressBar(self.scroll_frame, item, _variable=var, _width=_maxLen)
+            self.pbars[item] = pbar
+
+        self.ResetAll(_startValue if has_items else 0.0)
+
+    def UpdateProgress(self, item: str, value: float) -> None:
+        """Actualiza el progreso de un ítem en particular (0.0 a 100.0)."""
+        if item in self.vars:
+            clamped_val = max(0.0, min(100.0, float(value)))
+            self.vars[item].set(clamped_val)  # Dispara la actualización automática del Overall
+
+    def __UpdateOverallState(self) -> None:
+        """Recalcula el promedio de todos los progressbar e informa a la barra superior."""
+        if not self.vars:
+            self._pbarOverall["value"] = 0
+            self._varOverallText.set(0)
+            return
+
+        total_value = sum(var.get() for var in self.vars.values())
+        avg_value = total_value / len(self.vars)
+
+        self._pbarOverall["value"] = avg_value
+        self._varOverallText.set(avg_value)
+
+    def GetProgressValues(self) -> dict[str, float]:
+        """Devuelve un diccionario con el porcentaje actual de cada ítem."""
+        return {item: var.get() for item, var in self.vars.items()}
+
+    def ResetAll(self, state: float = 0.0) -> None:
+        """Resetea todas las barras al valor recibido (por defecto 0.0)."""
+        clamped_val = max(0.0, min(100.0, float(state)))
+        for var in self.vars.values():
+            var.set(clamped_val)
+
+class HelperStyle():
+    @staticmethod
+    def GetStyle(_parent:tk.Misc)->tb.Style:
+        root_window = _parent.winfo_toplevel()
+        if isinstance(root_window, tb.Window):
+            return root_window.style
+        return tb.Style(_parent)
+
     
+        
 #endregion

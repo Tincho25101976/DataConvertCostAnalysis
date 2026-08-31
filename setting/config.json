@@ -12,7 +12,9 @@
                 "Unit",
                 "MaterialName"
             ],
-            "isProcess": false
+            "isProcess": false,
+            "sheetName": "SourceMaterialsComplete",
+            "tableAlias": "tSourceMaterial"
         },
         {
             "name": "tSourcePlant",
@@ -22,7 +24,9 @@
                 "Value",
                 "Priority"
             ],
-            "isProcess": true
+            "isProcess": true,
+            "sheetName": "SourcePlant",
+            "tableAlias": "tSourcePlant"
         }
     ]
 }

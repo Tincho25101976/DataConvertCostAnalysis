@@ -1,14 +1,17 @@
 import ctypes
 import os
+import re
 import sys
 import threading
 from typing import Any, Callable, Final
 
 import tkinter as tk
-from tkinter import ttk, filedialog 
+from tkinter import ttk, filedialog
+from unittest import result 
 from matplotlib import table
 from numpy import maximum
 from pandas import DataFrame
+from polars import first
 from traitlets import HasTraits
 import ttkbootstrap as tb
 from ttkbootstrap.dialogs import Messagebox, Querybox
@@ -16,18 +19,18 @@ from ttkbootstrap.dialogs import Messagebox, Querybox
 from openpyxl import load_workbook, Workbook
 from openpyxl.worksheet._read_only import ReadOnlyWorksheet
 from openpyxl.worksheet.worksheet import Worksheet
+from openpyxl.utils import range_boundaries
 import pandas as pd
 
 from setting.Setting import Setting
-from helper.HelperControl import HelperControl, ControlStyleType, ScrolledCheckboxList
-#from helper.HelperControlCustom import ScrolledCheckboxList
+from helper.HelperControl import HelperControl, ControlStyleType, ScrolledCheckboxList, ScrolledProgressList
 from process.DataTypeProcess import DataTypeDataTable
 
 
 class ImportProcess(tb.Window):
     __TITLE_DEFAULT:Final[str] = 'Cost analysis process'
-    __CAPTION_DICT_HEADERS = 'headers'
-    __CAPTION_DICT_ROWS = 'rows'
+    #__CAPTION_DICT_HEADERS = 'headers'
+    #__CAPTION_DICT_ROWS = 'rows'
 
     def __init__(self, themename:str='superhero'):
         super().__init__(themename=themename)
@@ -43,15 +46,14 @@ class ImportProcess(tb.Window):
         appIcon = self.__appSetIcon()
         if appIcon: self.iconphoto(True, appIcon)
 
+        _style:tb.Style | None = tb.Style.get_instance()
+        if not _style:
+            return
         self.settingApp: Setting = Setting()
-        self.hp: HelperControl = HelperControl(self.settingApp, ControlStyleType.THEME)
-
-        
+        self.hp: HelperControl = HelperControl(self.settingApp, _style, ControlStyleType.THEME)
 
         self.__setEnvirotmeVariables()
         self.__setPanels(self.hp)
-
-
 
     #region set app
     def __appSetDarkTitleBar(self):
@@ -82,7 +84,7 @@ class ImportProcess(tb.Window):
         self.__workbookSecureClose(self.sourceWorkbook)
         self.__workbookSecureClose(self.sourceWorkbookMeta)
         
-        if hasattr(self, '_excelData'): self._excelData = {}
+        #if hasattr(self, '_excelData'): self._excelData = {}
         if hasattr(self, '_dfDataList'): self._dfDataList = None
         if hasattr(self, '_dfDataListIsProcess'): self._dfDataListIsProcess = None
 
@@ -121,6 +123,9 @@ class ImportProcess(tb.Window):
         if not _ctr: return False
         result:bool = _ctr in self.__dict__.values()
         return result
+    def __isActive(self, _ctr)->bool:
+        if not _ctr: return False
+        return self.__isInSelf(_ctr) and _ctr is not None
     #endregion
 
     #region panels
@@ -132,13 +137,13 @@ class ImportProcess(tb.Window):
         self._excelSheetActive: tk.StringVar = tk.StringVar()
         self._excelTableActive:tk.StringVar = tk.StringVar()
         self._excelProgressFile:tk.DoubleVar = tk.DoubleVar(value=0)
-        self._excelData:dict={}
         self._dfDataList:list[DataTypeDataTable] | None = None
         self._dfDataListIsProcess:list[DataTypeDataTable] | None = None
 
         self._structTableNameActive:tk.StringVar = tk.StringVar()
+        self._structSheetNameActive:tk.StringVar = tk.StringVar()
+        self._structTableAlias:tk.StringVar = tk.StringVar()
         self._structTableIsProcess:tk.BooleanVar = tk.BooleanVar(value=False)
-        
 
     def __setPanels(self, hp:HelperControl):
         if hp is None: return
@@ -167,6 +172,7 @@ class ImportProcess(tb.Window):
 
         #region left
         _frmPathExcelFile = hp.ControlLabelFrameForRow(_frmTabLeftOne, "Workbook")
+
         _frmRow0:tb.Frame = hp.ControlFrameForRow(_frmPathExcelFile)
         self._cboSheet:tb.Combobox = hp.ControlComboBoxWithLabelWidth(_frmRow0, 'Sheets', 
                                             _command=self.__wbLoadTableBySheet,
@@ -178,14 +184,18 @@ class ImportProcess(tb.Window):
 
         _frmRow1:tb.Frame = hp.ControlFrameForRow(_frmPathExcelFile)
         self._cmdOpen = hp.ControlButtonLEFT(_frmRow1, 'Open', _command=self.__wbReadStructFile)
-        self._cmdOpen = hp.ControlButtonLEFT(_frmRow1, 'Read', _command=self.__wbLoadAsync)
-        self._cmdDataTable = hp.ControlButtonRIGHT(_frmRow1, 'Data table', _command=self.__onTableSelected)
+        self._cmdRead = hp.ControlButtonLEFT(_frmRow1, 'Read', _command=self.__wbLoadAsync, _state=False)
+        self._cmdDataTable = hp.ControlButtonRIGHT(_frmRow1, 'Data table', _command=self.__onTableSelected, _state=False)
         
         _frmRow2:tb.Frame = hp.ControlFrameForRow(_frmPathExcelFile)
         self._lblStatus:tb.Label = hp.ControlLabelInfoLEFT(_frmRow2, '...')
 
         _frmRow3:tb.Frame = hp.ControlFrameForRow(_frmPathExcelFile)
         self.progress_bar = hp.ControlProgressBar(_frmRow3, _variable=self._excelProgressFile)
+        self.lstProgress:ScrolledProgressList = hp.ControlScrolledProgressList(
+                                                        _frmRow3, 
+                                                        "Sheets load progress",
+                                                        self.settingApp.GetTables())
 
         _frmSheetsProcess:tb.Labelframe = hp.ControlLabelFrameForRow(_frmTabLeftOne, "Sheets of process")
         self._lstChkSheetIsProcess:ScrolledCheckboxList = hp.ControlScrolledCheckboxList(
@@ -209,14 +219,22 @@ class ImportProcess(tb.Window):
         # Struct
         #------------------------------------------------------------------------------------
         _frmStruct:tb.LabelFrame = hp.ControlLabelFrameForRowEnd(_frmTabRightOne, "Metadata")
+        #hp.SetHelperStyle(_frmStruct, '#4567aa')
 
         _frmRowStruct01:tb.Frame = hp.ControlFrameForRow(_frmStruct)
         self._cboStructTable:tb.Combobox = hp.ControlComboBoxWithLabelWidth(_frmRowStruct01, 'Tables', 
                                             _textVariable=self._structTableNameActive,
                                             _command=self.__wsStructMakeStruct,
                                             _width=45)
+        self._txtStructSheet:tb.Entry = hp.ControlEntryWithLabelWidth(_frmRowStruct01, 'Sheet', 
+                                            _textVariable=self._structSheetNameActive,
+                                            _status=False)
+    
+        self._txtTableAlias:tb.Entry = hp.ControlEntryWithLabelWidth(_frmRowStruct01, 'Alias', 
+                                            _textVariable=self._structTableAlias)
+        
         self._cmdStructSave:tb.Button = hp.ControlButtonRIGHT(_frmRowStruct01, 'Save struct', 
-                                        _command=self.__wsStructSave)
+                                            _command=self.__wsStructSave)
 
         
         _frmRowStruct02:tb.Frame = hp.ControlFrameForRow(_frmStruct)
@@ -226,6 +244,7 @@ class ImportProcess(tb.Window):
 
         _frmRowStruct03:tb.Frame = hp.ControlFrameForRowEnd(_frmStruct)
         self._lstChkStructColumns:ScrolledCheckboxList = hp.ControlScrolledCheckboxList(_frmRowStruct03, 'Columns of table')
+        #hp.SetHelperStyle(_frmRowStruct03)
         
         #endregion
         #------------------------------------------------------
@@ -233,26 +252,16 @@ class ImportProcess(tb.Window):
     #endregion
 
     #region workbook actions
-    def __wbLoadAsync(self, filePath:str | None = None):
-        self._cmdOpen.config(state=tk.DISABLED)
+    def __wbLoadAsync(self):
+        self._cmdRead.config(state=tk.DISABLED)
         self.progress_bar['value'] = 0
         self._dfDataListIsProcess = []
         self._dfDataList = []
 
-        if filePath is None:
-            filePath = filedialog.askopenfilename(
-                filetypes=[("Excel Files", "*.xlsx")]
-            )
-            if not filePath:
-                return
-        else:
-            filePath = filePath
-
-        if not filePath or not os.path.exists(filePath): return
-        self.sourceFilePath = filePath
+        if self.sourceFilePath is None: return
 
         threading.Thread(
-            target=self.__wbReadFile, args=(filePath, self.__wbProgressLoad), daemon=True
+            target=self.__wbReadFile, args=(self.sourceFilePath, self.__wbProgressLoad), daemon=True
         ).start()
 
     def __wbReadStructFile(self):
@@ -278,10 +287,11 @@ class ImportProcess(tb.Window):
                 self.after(0, self.__wbIssueLoadFile, "Tables not found (ListObjects).")
                 return
 
-            self.__setValuesComboBox(self._cboStructTable, _tablesOfBook)
+            #self.__setValuesComboBox(self._cboStructTable, _tablesOfBook)
 
             if self.sourceWorkbookMeta:
-                self.after(0, self.__wbLoadSheet)
+                self.after(0, self.__setValuesComboBox, self._cboStructTable, _tablesOfBook)
+                self.after(0, self._cmdRead.config(state=tk.NORMAL))
 
         except Exception as e:
             self.after(0, self.__wbIssueLoadFile, str(e))
@@ -298,72 +308,127 @@ class ImportProcess(tb.Window):
                 table = ws.tables[tableName]
                 _t = [str(col.name) for col in table.tableColumns]
                 _columns.extend(_t)
+                _sheet:str | None = self.settingApp.GetSheetName(tableName)
+                _alias:str = self.settingApp.GetTableAlias(tableName)
+                _isProcess:bool = self.settingApp.IsTableProcessable(tableName)
+
+                self._structSheetNameActive.set(_sheet if not _sheet is None else sheet_name)
+                self._structTableAlias.set(_alias)
+                self._structTableIsProcess.set(_isProcess)
 
         if not _columns: return
         if not self.__isInSelf(self._lstChkSheetIsProcess): return
-        self._lstChkStructColumns.SetItems(_columns)
+        result:list[tuple[str, bool]] = []
+        _columnsSet:list[str] | None = self.settingApp.GetColumnsByTable(tableName)
+        if not _columnsSet:
+            result = [(s, True) for s in _columns]
+        else:
+            result = [(s, (s in _columnsSet)) for s in _columns]
+            
+        self._lstChkStructColumns.SetItems(result)
 
     def __wsStructSave(self):
         tableName:str = self._structTableNameActive.get()
         tableIsProcess:bool = self._structTableIsProcess.get()
         tableColumns:list[str] = self._lstChkStructColumns.GetCheckedItems()
+        sheetName:str = self._structSheetNameActive.get()
+        tableAlias:str = self._structTableAlias.get()
         if tableName and tableColumns:
-            self.settingApp.SaveOrUpdateTableConfig(tableName, tableColumns, tableIsProcess)
+            self.settingApp.SaveOrUpdateTableConfig(tableName, tableColumns, tableIsProcess,
+                                sheetName, tableAlias)
 
-
-    def __wbReadFile(self, filePath:str, progressCallback: Callable[[float, str], None] | None = None):
+    def __wbReadFile(self, filePath: str, progressCallback: Callable[[float, str, str, float], None] | None = None):
         try:
-            self._excelData.clear()
-            self.sourceWorkbookMeta = load_workbook(filePath, data_only=True, read_only=False)
+            if not self.__isInSelf(self.sourceWorkbookMeta): return
+            if not self.__isInSelf(self.settingApp): return
+            if self.sourceWorkbookMeta is None: return
+            if self.settingApp is None: return
 
-            _sheetWithTable = []
+            _tablesInSetting: list[str] = self.settingApp.GetTables()
+            if not _tablesInSetting: return
+
+            _targetTables: dict[str, dict] = {}
+            _setTablesInSetting = set(_tablesInSetting) # Optimización con set
+
             for sheetName in self.sourceWorkbookMeta.sheetnames:
                 ws = self.sourceWorkbookMeta[sheetName]
                 if ws.tables and ws.sheet_state == 'visible':
-                    _sheetWithTable.append(sheetName)
+                    for tableName, tableObj in ws.tables.items():
+                        if tableName in _setTablesInSetting:
+                            _targetTables[str(tableName)] = {
+                                'sheet': sheetName,
+                                'ref': str(tableObj)
+                            }
 
-            if not _sheetWithTable:
+            if not _targetTables:
                 self.after(0, self.__wbIssueLoadFile, "Tables not found (ListObjects).")
                 return
 
             self.sourceWorkbook = load_workbook(filePath, data_only=True, read_only=True)
 
+            _rowCount: int = 0
+            for tbl_info in _targetTables.values():
+                min_c, min_r, max_c, max_r = range_boundaries(tbl_info['ref'])
+                if all(s for s in [max_r, min_r] if isinstance(s, int)):
+                    max_r_v:int = int(max_r) if isinstance(max_r, int) else 0
+                    min_r_v:int = int(min_r) if isinstance(min_r, int) else 0
+                    _rowCount += (max_r_v - min_r_v + 1)
+            
+            _rowProcess: int = 0
 
-            _rowCount: int = sum(
-                                getattr(self.sourceWorkbook[s], "max_row", 0) or 0
-                                for s in _sheetWithTable
-                            )        
-            _rowProcess:int = 0
-
-            for sheetName in _sheetWithTable:
+            for tableName, tbl_info in _targetTables.items():
+                _rowProcessTable:int=0
+                sheetName = tbl_info['sheet']
                 sheet = self.sourceWorkbook[sheetName]
-                _dataSheet = []
                 
+                min_c, min_r, max_c, max_r = range_boundaries(tbl_info['ref'])
+                if max_r is None: return 
+                _dataTable = []
+                _headers = []
+                _isHead:bool=True
                 if isinstance(sheet, (ReadOnlyWorksheet, Worksheet)):
-                    for row in sheet.iter_rows(values_only=True):
-                        _dataSheet.append(list(row))
+                    for row in sheet.iter_rows(
+                        min_row=min_r, max_row=max_r,
+                        min_col=min_c, max_col=max_c,
+                        values_only=True
+                    ):
+                        if _isHead: 
+                            _headers = row
+                            _isHead = False
+                        else :
+                            _dataTable.append(list(row))
                         _rowProcess += 1
-                        
+                        _rowProcessTable += 1
+
                         if progressCallback and _rowCount > 0:
                             _value:float = float((_rowProcess / _rowCount) * 100)
-                            progressCallback(_value, f"Read -> {sheet.title} ||| (Row: {_rowProcess:05d} of {_rowCount:05d})")
-                        
-                self._excelData[sheet.title] = _dataSheet
+                            _valueTable:float = float((_rowProcessTable / max_r) * 100)
+                            progressCallback(
+                                _value, 
+                                ("Read -> \n")
+                                    + (f"\t● Table: {tableName} ({sheetName}) \n")
+                                    + (f"\t● (Row: {_rowProcess:05d} of {_rowCount:05d})"),
+                                tableName,
+                                _valueTable
+                            )
 
-            #self.sourceWorkbook.close()
+                df = pd.DataFrame(_dataTable, columns=_headers)
+                _selectColumns:list[str] | None = self.settingApp.GetColumnsByTable(tableName)
+                if _selectColumns: 
+                    df = df[_selectColumns]
+                self.__addToDataFrame(tableName, df)
 
             if self.sourceWorkbookMeta:
-                self.after(0, self.__wbLoadSheet)
+                self.after(0, self.__wbLoadTableBySheet)
+                self.after(0, lambda: self._cmdDataTable.config(state=tk.NORMAL))
 
         except Exception as e:
             self.after(0, self.__wbIssueLoadFile, str(e))
 
-        if self.sourceWorkbook:
-            self.__wbLoadSheet()
-
-    def __wbProgressLoad(self, _value: float, _sheetData: str):
+    def __wbProgressLoad(self, _value: float, _sheetData: str, _tableName:str, _tableProgress:float):
         if hasattr(self, '_excelProgressFile'): self._excelProgressFile.set(value=_value)
         self._lblStatus.config(text=f'Process: {_sheetData}')
+        self.lstProgress.UpdateProgress(_tableName, _tableProgress)
 
     def __wbEndingLoad(self):
         self._lblStatus.config(text='Load successful')
@@ -373,113 +438,36 @@ class ImportProcess(tb.Window):
         self._lblStatus.config(text=_message)
         self._cmdOpen.config(state=tk.NORMAL)
 
-    def __wbLoadSheet(self) -> list[str]:
-        if hasattr(self, '_cboSheet'): self.__setValuesComboBox(self._cboSheet)
-        if hasattr(self, '_cboTable'): self.__setValuesComboBox(self._cboTable)
-        if not self.sourceWorkbookMeta: return []
-        if not self._excelData: return []
-        values: list[str] = list(self._excelData.keys())
-        self.__setValuesComboBox(self._cboSheet, values)
-        return values
-
     def __wbLoadTableBySheet(self) -> list[str]:
-        if hasattr(self, '_cboTable'): self.__setValuesComboBox(self._cboTable)
-        if not hasattr(self, '_cboSheet') or not hasattr(self, '_excelSheetActive'): return []
-        sheet_name = self._excelSheetActive.get()
-        if not sheet_name: return []
-        if not self.sourceWorkbookMeta or sheet_name not in self.sourceWorkbookMeta.sheetnames:
-            return []
-
-        ws = self.sourceWorkbookMeta[sheet_name]
-        tables_dict = getattr(ws, 'tables', {})
-        values: list[str] = list(tables_dict.keys()) if tables_dict else []
+        if not self.__isInSelf(self._cboTable): return []
+        self.__setValuesComboBox(self._cboTable)
+        if not self.__isInSelf(self.settingApp): return []
+        values: list[str] = self.settingApp.GetTables()
         if values: self.__setValuesComboBox(self._cboTable, values)
         return values
-        
-    def __wbGetTableDataByName(self, sheetName:str, tableName:str) -> dict[str, list]:
-        defaultReturn:dict[str, list] = {self.__CAPTION_DICT_HEADERS: [], self.__CAPTION_DICT_ROWS: []}
-        if not self.sourceWorkbookMeta or sheetName not in self.sourceWorkbookMeta:
-            return defaultReturn
-
-        ws_meta:Worksheet = self.sourceWorkbookMeta[sheetName]
-
-        if tableName not in ws_meta.tables:
-            return defaultReturn
-
-        excel_table = ws_meta.tables[tableName]
-        table_range = excel_table.ref 
-        if not table_range: 
-            return defaultReturn
-
-        from openpyxl.utils.cell import range_boundaries
-
-        tupleRef:list[int] = [-1, -1, -1, -1]
-        min_col, min_row, max_col, max_row = range_boundaries(table_range)
-        for i, s in enumerate([min_col, min_row, max_col, max_row]):
-            if isinstance(s, int): tupleRef[i] = int(s)
-            else: return defaultReturn
-
-        if not tupleRef or len(tupleRef) <= 0:
-            return defaultReturn
-
-        raw_sheet_data = self._excelData.get(sheetName, [])
-        if not raw_sheet_data:
-            return defaultReturn
-
-        _colMin, _rowMin, _colMax, _rowMax = tupleRef 
-        table_rows = []
-        for r in range(_rowMin - 1, _rowMax):
-            if r < len(raw_sheet_data):
-                row_segment = raw_sheet_data[r][_colMin - 1 : _colMax]
-                table_rows.append(row_segment)
-
-        if not table_rows:
-            return defaultReturn
-
-        headers = table_rows[0]
-        data_rows = table_rows[1:]
-
-        return {self.__CAPTION_DICT_HEADERS: headers, self.__CAPTION_DICT_ROWS: data_rows}
-
-    def __wbGetTableAsDataFrame(self, sheetName: str, tableName: str) -> pd.DataFrame:
-        dataList:dict[str, Any] = self.__wbGetTableDataByName(sheetName, tableName)
-
-        headers = dataList[self.__CAPTION_DICT_HEADERS]
-        rows = dataList[self.__CAPTION_DICT_ROWS]
-
-        if not headers:
-            return pd.DataFrame()
-
-        df = pd.DataFrame(rows, columns=headers)
-
-        allowedColumns = self.settingApp.GetColumnsByTable(tableName)
-        if allowedColumns:
-            validColumns = [c for c in allowedColumns if c in df.columns]
-            if validColumns:
-                df = df[validColumns]
-
-        self.__addToDataFrame(tableName, df)
-
-        return df
 
     def __onTableSelected(self):
-        sheet_name = self._excelSheetActive.get()
         table_name = self._excelTableActive.get()
         tree = self._twViewer
-        if not sheet_name or not table_name and not tree:
+
+        if not table_name and not tree:
             return
 
-        df = self.__wbGetTableAsDataFrame(sheet_name, table_name)
-
+        df = self.__getDataFrameByTable(table_name)
         for item in tree.get_children():
             tree.delete(item)
 
+        if df is None: return
         self.hp.ControlTreeviewSetLayout(tree, df)
         
         df_clean = df.fillna('')
 
         for _, row in df_clean.iterrows():
             tree.insert('', tk.END, values=list(row))
+
+    #endregion
+
+    #region dataframe
 
     def __addToDataFrame(self, name:str, df:DataFrame):
         if self._dfDataList is None: self._dfDataList = []
@@ -489,6 +477,18 @@ class ImportProcess(tb.Window):
             self._dfDataList.append(DataTypeDataTable(name, df))
         if name in tableIsProcess: self._dfDataListIsProcess.append(DataTypeDataTable(name, df))
         else: self._dfDataList.append(DataTypeDataTable(name, df))
+
+    def __getDataFrameByTable(self, name:str)->pd.DataFrame | None:
+        if not self.__isInSelf(self._dfDataList): return None
+        if not self.__isInSelf(self._dfDataListIsProcess): return None
+        if not name or len(name) <= 0: return None
+        _dfs:list[DataTypeDataTable] = self._dfDataListIsProcess if self._dfDataListIsProcess else []
+        _dfs.extend(self._dfDataList if self._dfDataList else [])
+        if not _dfs: return None
+        try:
+            return next((s.df for s in _dfs if s.name == name), None)
+        except:
+            return None
 
     #endregion
 
